@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>双语字幕 · 设置</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: "Microsoft YaHei UI", "微软雅黑", system-ui, sans-serif;
+    max-width: 680px; margin: 32px auto; padding: 0 20px; line-height: 1.7;
+    color: #222; background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #1c1c1e; }
+    .card { background: #26262a !important; border-color: #3a3a40 !important; }
+    input, select { background: #1c1c1e; color: #e6e6e6; border-color: #3a3a40 !important; }
+    .hint { color: #9a9aa2 !important; }
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .card {
+    border: 1px solid #e3e3e8; border-radius: 10px; padding: 16px 18px;
+    margin-bottom: 16px; background: #fafafc;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; letter-spacing: .02em; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .row label { flex: 0 0 108px; font-size: 13px; color: #555; }
+  @media (prefers-color-scheme: dark) { .row label { color: #b0b0b8; } }
+  input[type=text], input[type=password], select {
+    flex: 1; padding: 7px 10px; border: 1px solid #d5d5dd; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+  }
+  input[type=range] { flex: 1; }
+  .val { width: 52px; text-align: right; font-size: 12px; color: #888; font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12px; color: #8a8a92; margin-top: 6px; }
+  button {
+    padding: 8px 18px; border-radius: 7px; border: 1px solid transparent;
+    background: #e87cae; color: #fff; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  button:hover { filter: brightness(1.06); }
+  button.ghost { background: transparent; color: #e87cae; border-color: #e87cae; }
+  .status { font-size: 12px; margin-top: 10px; min-height: 18px; }
+  .ok { color: #2e9e5b; }
+  .err { color: #d2453f; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+  code { background: rgba(232,124,174,.12); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>双语字幕 · English → 中文</h1>
+  <div class="sub">抓取视频的英文字幕轨，实时翻译成中文，双语对照显示在画面上。</div>
+
+  <div class="card">
+    <h2>翻译引擎</h2>
+    <div class="row">
+      <label>引擎</label>
+      <select id="engine">
+        <option value="auto">自动（优先内置，失败转 DeepSeek）</option>
+        <option value="builtin">仅用浏览器内置翻译（免费离线）</option>
+        <option value="deepseek">仅用 DeepSeek API</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>DeepSeek 密钥</label>
+      <input type="password" id="apiKey" placeholder="sk-...">
+    </div>
+    <div class="row">
+      <label>模型</label>
+      <input type="text" id="model" placeholder="deepseek-chat">
+    </div>
+    <div class="row">
+      <label>接口地址</label>
+      <input type="text" id="baseUrl" placeholder="https://api.deepseek.com">
+    </div>
+    <div class="hint">密钥只保存在本机浏览器存储里，只会发往上面填的接口地址。</div>
+  </div>
+
+  <div class="card">
+    <h2>语音识别（没有字幕轨时使用）</h2>
+    <div class="row">
+      <label>识别模式</label>
+      <select id="asrMode">
+        <option value="stream">流式（sherpa-onnx，延迟 0.1–0.4 秒）</option>
+        <option value="chunk">分块（whisper，延迟 4–7 秒）</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>接口地址</label>
+      <input type="text" id="asrBaseUrl" placeholder="http://127.0.0.1:8000">
+    </div>
+    <div class="row">
+      <label>密钥</label>
+      <input type="password" id="asrKey" placeholder="gsk_... / sk-...">
+    </div>
+    <div class="row">
+      <label>模型</label>
+      <input type="text" id="asrModel" placeholder="whisper-large-v3-turbo">
+    </div>
+    <div class="hint">
+      需要 OpenAI 兼容的 <code>/audio/transcriptions</code> 接口。推荐 Groq（快且便宜）：
+      <code>https://api.groq.com/openai/v1</code> + <code>whisper-large-v3-turbo</code>；
+      本地跑 faster-whisper 就填 <code>http://127.0.0.1:8000/v1</code>，密钥可留空。
+      <br>注意：<b>DeepSeek 目前没有语音识别接口</b>，只能用它的账号做翻译。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>显示</h2>
+    <div class="row">
+      <label>显示原文</label>
+      <select id="showOriginal">
+        <option value="true">是（英文 + 中文两行）</option>
+        <option value="false">否（只显示中文）</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>过滤音效标注</label>
+      <select id="filterNoise">
+        <option value="true">是（去掉 [Music] / [Applause] / ♪）</option>
+        <option value="false">否（原样显示）</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>中文字号</label>
+      <input type="range" id="fontSize" min="16" max="88" step="1">
+      <span class="val" id="fontSizeVal">36px</span>
+    </div>
+    <div class="row">
+      <label>底部距离</label>
+      <input type="range" id="bottomOffset" min="0" max="40" step="1">
+      <span class="val" id="bottomOffsetVal">7%</span>
+    </div>
+    <div class="hint">占视频高度的百分比。调大到 15–20% 可以避开播放器自己的控制条。</div>
+  </div>
+
+  <div class="actions">
+    <button id="save">保存</button>
+    <button id="test" class="ghost">测试翻译</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

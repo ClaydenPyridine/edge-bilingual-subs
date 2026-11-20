@@ -1,0 +1,171 @@
+/* 双语字幕浮层 v0.8
+ * - 无实心底框：只有文字 + 描边 + 阴影，背景视频可见
+ * - 高对比：白色字 + 黑色描边；若探测到画面偏亮，自动切成深色字 + 白描边
+ * - 固定宽度，位置不动，避免文字变长时整块跳动
+ */
+.bi-sub-host {
+  --bi-font: 36px;
+  --bi-pad: 7%;
+  --bi-l: 0px;
+  --bi-t: 0px;
+  --bi-w: 0px;
+  --bi-h: 0px;
+
+  --bi-fg: #ffffff;
+  --bi-stroke: rgba(0, 0, 0, .92);
+  --bi-shadow: rgba(0, 0, 0, .9);
+
+  position: fixed !important;
+  left: var(--bi-l) !important;
+  top: var(--bi-t) !important;
+  width: var(--bi-w) !important;
+  height: var(--bi-h) !important;
+  z-index: 2147483000 !important;
+
+  pointer-events: none !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+
+  opacity: 0;
+  transition: opacity .12s ease;
+  font-family: "Microsoft YaHei UI", "微软雅黑", "PingFang SC", system-ui, sans-serif;
+}
+
+/* 画面偏亮 → 换成深色字 + 浅描边（由 JS 打上 bi-on-light） */
+.bi-sub-host.bi-on-light {
+  --bi-fg: #0d0d0f;
+  --bi-stroke: rgba(255, 255, 255, .95);
+  --bi-shadow: rgba(255, 255, 255, .85);
+}
+
+.bi-sub-host.bi-visible {
+  opacity: 1;
+}
+
+/* 字幕条：完全透明，只负责排版与定位 */
+.bi-sub-inner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--bi-pad);
+
+  width: min(92%, 1300px);
+  min-height: 1.2em;
+  padding: 0;
+
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .1em;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.bi-sub-badge {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--bi-fg);
+  -webkit-text-stroke: .8px var(--bi-stroke);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 4px var(--bi-shadow);
+  opacity: .9;
+  margin-bottom: .1em;
+}
+.bi-sub-badge:empty { display: none; }
+
+.bi-sub-en {
+  font-size: calc(var(--bi-font) * 0.6);
+  line-height: 1.35;
+  color: var(--bi-fg);
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: center;
+  /* 三件套：描边 + 近距离硬阴影 + 远距离柔光，保证任何底色都压得住 */
+  -webkit-text-stroke: 1.2px var(--bi-stroke);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 2px var(--bi-shadow),
+    0 2px 5px var(--bi-shadow),
+    0 0 14px var(--bi-shadow);
+}
+
+.bi-sub-zh {
+  font-size: var(--bi-font);
+  line-height: 1.42;
+  /* 始终预留一行高度：中文还没来时也不会让整块上下跳、更不会改变英文大小 */
+  min-height: 1.42em;
+  color: var(--bi-fg);
+  font-weight: 800;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: center;
+  -webkit-text-stroke: 1.7px var(--bi-stroke);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 2px var(--bi-shadow),
+    0 2px 6px var(--bi-shadow),
+    0 0 18px var(--bi-shadow);
+}
+
+/* 只显示中文 */
+.bi-sub-host.bi-zh-only .bi-sub-en { display: none; }
+
+/* ================= 右下角控制条 ================= */
+.bi-sub-widget {
+  position: fixed !important;
+  z-index: 2147483001 !important;
+  transform: translate(-100%, -100%) !important;
+
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 7px 13px !important;
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, .62) !important;
+  border: 1px solid rgba(255, 255, 255, .18) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+
+  color: #e8e8ee !important;
+  font: 600 13px/1.2 "Microsoft YaHei UI", "微软雅黑", system-ui, sans-serif !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  pointer-events: auto !important;
+  opacity: .5;
+  transition: opacity .15s ease, background .15s ease;
+}
+.bi-sub-widget:hover { opacity: 1; background: rgba(0, 0, 0, .85) !important; }
+.bi-sub-widget.bi-on {
+  opacity: 1;
+  border-color: rgba(232, 124, 174, .85) !important;
+}
+.bi-sub-widget.bi-warn {
+  opacity: .95;
+  border-color: rgba(255, 170, 60, .9) !important;
+}
+.bi-sub-widget.bi-warn .bi-sub-dot { background: #ffae3c; }
+
+.bi-sub-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #888;
+}
+.bi-sub-widget.bi-on .bi-sub-dot {
+  background: #ff5f9e;
+  animation: bi-pulse 1.6s ease-out infinite;
+}
+@keyframes bi-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 95, 158, .55); }
+  70%  { box-shadow: 0 0 0 8px rgba(255, 95, 158, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 95, 158, 0); }
+}

@@ -1,0 +1,20 @@
+# 依赖
+node_modules/
+__pycache__/
+*.pyc
+
+# 模型与二进制（体积大，不入库）
+*.onnx
+*.bin
+*.tar.bz2
+*.zip
+
+# 日志与临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 本地配置
+.env
+.env.*
