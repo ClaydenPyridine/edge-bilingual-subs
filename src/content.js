@@ -29,6 +29,9 @@
   let settings = { ...DEFAULT_SETTINGS };
   let apiKeyConfigured = true;
 
+  // 每个页面实例一个唯一标识：旧页面的识别结果会被这里直接丢弃
+  const PAGE_ID = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
   /* ================= ASR 状态 ================= */
   let asrRunning = false;
   let live = null;          // { text, zh, at } —— 语音识别的最新一段
@@ -97,8 +100,26 @@
   function clearCues() {
     cues.length = 0;
     live = null;
+    pendingSeg = null;
+    lastZh = '';
+    lastZhText = '';
     lastVideoEl = null;
     if (host) host.classList.remove('bi-visible');
+  }
+
+  let lastPageChangeAt = 0;
+  /**
+   * 换视频 / 换页面：
+   *   ① 清掉旧字幕
+   *   ② 如果识别正在跑，重启一条全新的流 —— 否则旧音频的识别结果会继续渗进来
+   */
+  function onPageChanged() {
+    clearCues();
+    if (!asrRunning) return;
+    const now = Date.now();
+    if (now - lastPageChangeAt < 3000) return;   // 单页应用会连着触发，防抖
+    lastPageChangeAt = now;
+    chrome.runtime.sendMessage({ type: 'asr-restart', pageId: PAGE_ID }).catch(() => {});
   }
 
   function cueAt(t) {
@@ -396,7 +417,7 @@
     }
 
     try {
-      const r = await chrome.runtime.sendMessage({ type: 'asr-toggle' });
+      const r = await chrome.runtime.sendMessage({ type: 'asr-toggle', pageId: PAGE_ID });
       if (r && r.ok) {
         asrRunning = !!r.running;
         widgetMsg = '';
@@ -505,7 +526,7 @@
     positionOverlay(v);
 
     // 换了一个 <video> 元素 = 换了视频，清掉旧字幕
-    if (lastVideoEl && v !== lastVideoEl) clearCues();
+    if (lastVideoEl && v !== lastVideoEl) onPageChanged();
     lastVideoEl = v;
 
     // 画面偏亮时自动切成深色字（跨域视频读不到像素时会退化成默认白字描边）
@@ -572,7 +593,7 @@
       // 只在真正需要用户知道时才提示
       if (d.state === 'no-english') showStatus('这个视频没有英文字幕轨', 5000);
       else if (d.state === 'track-error') showStatus('字幕读取失败', 4000);
-      else if (d.state === 'navigated') clearCues();
+      else if (d.state === 'navigated') onPageChanged();
       else if (d.state === 'track-loaded' || d.state === 'track-silent' || d.state === 'track-found') showStatus('', 0);
     }
   });
@@ -606,7 +627,16 @@
     if (!rafId) loop();
     try {
       const st = await chrome.runtime.sendMessage({ type: 'asr-query' });
-      if (st && st.ok) { asrRunning = !!st.running; updateWidget(); }
+      if (st && st.ok) {
+        // 如果正在跑的是别的页面实例的识别，说明本页不是主人 —— 停掉它，避免串台
+        if (st.running && st.pageId && st.pageId !== PAGE_ID) {
+          chrome.runtime.sendMessage({ type: 'asr-stop' }).catch(() => {});
+          asrRunning = false;
+        } else {
+          asrRunning = !!st.running;
+        }
+        updateWidget();
+      }
     } catch (_) {}
     window.postMessage({ source: SRC, type: 'request-track' }, '*');
     attachGenericTracks();
@@ -638,6 +668,8 @@
       return true;
     }
     if (msg.type === 'asr-segment') {
+      // 不是本页面的结果（旧页面 / 换过视频）直接丢弃
+      if (msg.pageId && msg.pageId !== PAGE_ID) return;
       onAsrSegment(msg.text, msg.zh);
       sendResponse({ ok: true });
       return true;
@@ -647,6 +679,14 @@
       sendResponse({ ok: true });
       return true;
     }
+  });
+
+  // 页面被关掉 / 跳走 / 进缓存时，立刻停掉标签页音频采集，不留后台会话
+  window.addEventListener('pagehide', () => {
+    try { chrome.runtime.sendMessage({ type: 'asr-stop' }); } catch (_) {}
+  });
+  window.addEventListener('beforeunload', () => {
+    try { chrome.runtime.sendMessage({ type: 'asr-stop' }); } catch (_) {}
   });
 
   boot();

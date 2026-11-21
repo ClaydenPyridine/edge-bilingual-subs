@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
 
 const memCache = new Map();     // 原文 -> 中文
 let asrTabId = null;
+let asrPageId = null;      // 发起识别的那个页面实例；旧页面的结果一律丢弃
 let asrRunning = false;
 
 /* ================= 翻译 ================= */
@@ -129,7 +130,7 @@ function badge(tabId, text, color) {
   } catch (_) {}
 }
 
-async function startASR(tabId) {
+async function startASR(tabId, pageId) {
   await ensureOffscreen();
 
   const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
@@ -140,7 +141,8 @@ async function startASR(tabId) {
   }
 
   asrTabId = tabId;
-  try { await chrome.storage.session.set({ asrTabId: tabId }); } catch (_) {}
+  asrPageId = pageId || null;
+  try { await chrome.storage.session.set({ asrTabId: tabId, asrPageId }); } catch (_) {}
   const resp = await chrome.runtime.sendMessage({
     target: 'offscreen',
     type: 'start',
@@ -174,26 +176,40 @@ async function stopASR() {
   asrRunning = false;
   if (asrTabId != null) badge(asrTabId, '');
   asrTabId = null;
+  asrPageId = null;
   try { await chrome.storage.session.remove('asrTabId'); } catch (_) {}
+  try { await chrome.storage.session.remove('asrPageId'); } catch (_) {}
   return true;
 }
 
 /** 把识别结果发给页面；background 可能被回收过，所以用会话存储兜底 */
 async function forwardSegment(text, zh) {
   let tabId = asrTabId;
-  if (tabId == null) {
+  let pageId = asrPageId;
+  if (tabId == null || pageId == null) {
     try {
-      const s = await chrome.storage.session.get('asrTabId');
-      tabId = s && s.asrTabId != null ? s.asrTabId : null;
+      const s = await chrome.storage.session.get(['asrTabId', 'asrPageId']);
+      if (tabId == null) tabId = s && s.asrTabId != null ? s.asrTabId : null;
+      if (pageId == null) pageId = (s && s.asrPageId) || null;
     } catch (_) {}
   }
   if (tabId == null) return;
-  try { await chrome.tabs.sendMessage(tabId, { type: 'asr-segment', text, zh }); } catch (_) {}
+  // 带上页面标识：旧页面（已换视频 / 已关）收到会自己丢弃
+  try { await chrome.tabs.sendMessage(tabId, { type: 'asr-segment', text, zh, pageId }); } catch (_) {}
 }
 
-async function toggleASR(tabId) {
+async function toggleASR(tabId, pageId) {
   if (asrRunning) { await stopASR(); return { running: false }; }
-  await startASR(tabId);
+  await startASR(tabId, pageId);
+  return { running: true };
+}
+
+/** 换视频时重启识别：让服务端换一条全新的流，旧文本不会渗进来 */
+async function restartASR(tabId, pageId) {
+  await stopASR();
+  // 停和起之间留一点间隔，否则 Chrome 的 tabCapture 容易返回静音流
+  await new Promise((r) => setTimeout(r, 700));
+  await startASR(tabId, pageId);
   return { running: true };
 }
 
@@ -231,7 +247,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const tabId = (sender && sender.tab && sender.tab.id) || msg.tabId;
       try {
-        const r = await toggleASR(tabId);
+        const r = await toggleASR(tabId, msg.pageId);
         sendResponse({ ok: true, running: r.running });
       } catch (e) {
         sendResponse({ ok: false, error: String(e && e.message || e) });
@@ -240,8 +256,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  /* --- 换视频：重启识别，换一条全新的流 --- */
+  if (msg.type === 'asr-restart') {
+    (async () => {
+      const tabId = (sender && sender.tab && sender.tab.id) || msg.tabId;
+      try {
+        const r = await restartASR(tabId, msg.pageId);
+        sendResponse({ ok: true, running: r.running });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e && e.message || e) });
+      }
+    })();
+    return true;
+  }
+
+  /* --- 页面即将卸载 / 关闭：立刻停掉采集 --- */
+  if (msg.type === 'asr-stop') {
+    stopASR().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   if (msg.type === 'asr-query') {
-    sendResponse({ ok: true, running: asrRunning });
+    sendResponse({ ok: true, running: asrRunning, pageId: asrPageId });
     return true;
   }
 

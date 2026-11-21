@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "双语字幕 · English → 中文",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "抓取英文字幕轨或直接识别标签页语音，实时翻译成中文，双语对照显示。",
   "permissions": ["storage", "tabCapture", "offscreen"],
   "host_permissions": ["<all_urls>"],
